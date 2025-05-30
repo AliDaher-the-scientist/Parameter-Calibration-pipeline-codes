@@ -334,9 +334,7 @@ def initial_theta0_sample(i, std_prior, mean_prior, epsilon, fixed_indices, fixe
         attempts+=1
     if score is None:
         #raise RuntimeError(f"Failed to get valid score for T=0 after {max_attempts} attempts.")
-        print(f"failed to get valid score for T=0 after {max_attempts} attempts; returning theta_star with reduced epsilon")
-        score = evaluate_realization(unnormalized_sample,interaction_data,\
-                                  neighbours, mesh_properties, cell_densities, 0.75*epsilon)
+        print(f"failed to get valid score for T=0 after {max_attempts} attempts; assigning weight 0 to assignment")
     return theta_star, score
 
 
@@ -361,16 +359,17 @@ def iterative_theta_sample(i, weights_old, theta_t_minus, kernel_cov_matrix,
                         neighbours, mesh_properties, cell_densities, epsilon)
         attempts+=1
     
-    if score is None:
-        #raise RuntimeError(f"Failed to get valid score for T=0 after {max_attempts} attempts.")
-        print(f"failed to get valid score after {max_attempts} attempts; returning theta_star with reduced epsilon")
-        unnormalized_sample[variable_indices] = std_prior*theta_t_minus[sample_number,:]+mean_prior
-        score = evaluate_realization(unnormalized_sample,interaction_data,\
-                                  neighbours, mesh_properties, cell_densities, 0.75*epsilon)
-        
+
     transition_vector = mvn_pdf_vectorized(theta_t_minus,theta_star, kernel_cov_matrix)
         #backward kernel evaluation from theta_star to previous particle realizations
     weight_new = prior_pdf_i/np.dot(weights_old, transition_vector)
+    
+    if score is None:
+        #raise RuntimeError(f"Failed to get valid score for T=0 after {max_attempts} attempts.")
+        print(f"failed to get valid score after {max_attempts} attempts; returning zero weight")
+        weight_new = 0
+    
+
     return theta_star, score, weight_new        
 
 if __name__ == "__main__":
@@ -383,9 +382,12 @@ if __name__ == "__main__":
               std_prior, mean_prior, epsilon_0, fixed_param_indices, fixed_param_MLE,\
                   gmm_prior) for i in range(N))
     theta_t_minus = np.array([r[0].squeeze() for r in results])
-    population_scores[0, :] = np.array([r[1] for r in results])
+    T_1_scores = np.array([r[1] for r in results])
+    population_scores[0, :] = T_1_scores
     particle_realizations[0,:,:] = theta_t_minus
     weights_old= 1/N *np.ones(N)
+    none_indices = np.where(T_1_scores == None)[0]
+    weights_old[none_indices] = 0
     kernel_cov_matrix =  np.cov(theta_t_minus,rowvar=False)*cov_scaling_constant+ \
                         + 1e-10 * np.eye(d_var)
                         
