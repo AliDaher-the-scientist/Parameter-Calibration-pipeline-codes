@@ -41,12 +41,12 @@ Apply first layer of filtering
 """
 # Assuming 'matrix' is the expression matrix (cells x genes)
 # Sum the expression of mitochondrial genes in each cell
-mito_genes_expression = np.sum(matrix[:,mito_genes], axis=1)  
+mito_genes_expression = np.sum(matrix[:,mito_genes], axis=1)
 # Now we can compute the percentage of mitochondrial gene expression per cell
 total_counts_expression_per_cell = np.sum(matrix, axis=1)  # Total counts per cell
 mito_percentage_per_cell = mito_genes_expression / total_counts_expression_per_cell  # Percentage of mitochondrial gene expression
 
-min_gene_number = 500
+min_gene_number = 500  #this should be 200.
 max_gene_number = 8000
 min_expression_count=500
 umi_counts_per_cell = np.sum(matrix > 0, axis=1)  # Count of non-zero values (i.e. number genes) per cell
@@ -58,7 +58,7 @@ filtered_matrix = matrix[np.where(filtered_cells==True)[0],:]
 
 
 #Apply scrublet filtering to remove double cell detection
-scrub = scr.Scrublet(filtered_matrix)  
+scrub = scr.Scrublet(filtered_matrix)
 doublet_scores, predicted_doublets = scrub.scrub_doublets()
 
 # Set the threshold for doublet detection (mean + 2 * absolute deviation)
@@ -158,9 +158,9 @@ sc.pp.highly_variable_genes(adata, n_top_genes=4000, flavor='seurat')
 
 if "highly_variable" not in adata.var.columns:
     raise ValueError("Highly variable genes were not computed correctly!")
-    
-    
-#perform dimensionality reduction and clustering    
+
+
+#perform dimensionality reduction and clustering
 adata_hvg = adata[:, adata.var.highly_variable].copy()
 sc.tl.pca(adata_hvg, n_comps=50)
 highly_variable_genes = adata.var.index[adata.var['highly_variable']]
@@ -178,24 +178,24 @@ sc.tl.leiden(adata_hvg, flavor='igraph' , resolution=0.8)
 #         # Create comparison vector
 #         subset = adata_hvg.copy()
 #         subset.obs["comparison"] = (subset.obs["leiden"] == cluster).astype(int)
-        
+
 #         # More stringent gene filtering
 #         gene_means = np.mean(subset.X, axis=0)
 #         gene_vars = np.var(subset.X, axis=0)
-        
+
 #         # Filter genes with low mean AND low variance
 #         keep_genes = (gene_means > 0.1) & (gene_vars > 0.01)
 #         subset = subset[:, keep_genes]
-        
+
 #         # Additional checks
 #         if subset.shape[1] < 50:  # Require minimum genes
 #             print(f"Cluster {cluster} skipped - only {subset.shape[1]} genes pass filters")
 #             continue
-            
+
 #         if np.any(~np.isfinite(subset.X)):
 #             print(f"Cluster {cluster} has non-finite values - skipping")
 #             continue
-            
+
 #         # Add stronger regularization
 #         test = de.test.wald(
 #             data=subset,
@@ -206,14 +206,14 @@ sc.tl.leiden(adata_hvg, flavor='igraph' , resolution=0.8)
 #             init_a=1.0,  # Stronger initialization
 #             init_b=1.0
 #         )
-        
+
 #         # Extract results with additional checks
 #         summary = test.summary()
-#         valid_results = summary[(summary["p_val_adj"] < 0.05) & 
+#         valid_results = summary[(summary["p_val_adj"] < 0.05) &
 #                               (np.isfinite(summary["avg_log2FC"]))]
 #         top_genes = valid_results.nlargest(20, "avg_log2FC")["gene"].tolist()
 #         results[cluster] = set(top_genes)
-        
+
 #     except Exception as e:
 #         print(f"Failed for cluster {cluster}: {str(e)}")
 #         continue
@@ -244,12 +244,12 @@ for cluster in adata_hvg.obs['leiden'].unique():
     # Get this cluster's top DEGs (uppercase for matching)
     cluster_genes = set(
         sc.get.rank_genes_groups_df(
-            adata_hvg, 
+            adata_hvg,
             group=str(cluster),
             key='de_results'
         )['names'].str.upper().head(50)  # Check top 50 genes
     )
-    
+
     # Find best-matching cell type from study
     best_match = None
     best_score = 0
@@ -258,7 +258,7 @@ for cluster in adata_hvg.obs['leiden'].unique():
         if overlap > best_score:
             best_score = overlap
             best_match = cell_type
-    
+
     # Assign label if sufficient overlap
     if best_score >= min_genes:
         adata_hvg.obs.loc[adata_hvg.obs['leiden'] == cluster, 'lineage'] = best_match
@@ -268,8 +268,8 @@ for cluster in adata_hvg.obs['leiden'].unique():
 # Propagate to full dataset
 adata.obs['lineage'] = adata_hvg.obs['lineage'].reindex(adata.obs.index)
 
-        
-        
+
+
 
 sc.pl.umap(adata_hvg, color='lineage')
 
@@ -288,7 +288,7 @@ ax.bar_label(bars, fmt='%d', label_type='edge')
 # Customize the plot
 ax.set_xlabel('Lineage')
 ax.set_ylabel('Cell Count')
-ax.set_title('Cell Count per Lineage (Stacked)')
+#ax.set_title('Cell Count per Lineage (Stacked)')
 
 # Rotate x-axis labels for better readability
 plt.xticks(rotation=45, ha='right')
@@ -298,6 +298,47 @@ plt.xticks(rotation=45, ha='right')
 #     ax.text(i, v, str(v), ha='center', va='bottom')
 
 plt.tight_layout()
+plt.show()
+
+
+#For NPJ submission combined graph
+
+# Panel (a): UMAP
+fig = plt.figure(figsize=(10, 12))  
+gs = fig.add_gridspec(2, 1, height_ratios=[1, 1], hspace=0.35)
+
+# --- Subplot (a) ---
+ax1 = fig.add_subplot(gs[0])
+sc.pl.umap(
+    adata_hvg, 
+    color='lineage', 
+    ax=ax1, 
+    show=False,
+    legend_loc='on data'  # or "right margin"
+)
+ax1.text(-0.05, 1.05, "(a)", transform=ax1.transAxes, fontsize=16, fontweight="bold")
+
+# --- Subplot (b) ---
+ax2 = fig.add_subplot(gs[1])
+
+# Lineage counts
+lineage_counts = adata_hvg.obs['lineage'].value_counts().sort_values(ascending=False)
+
+bars = ax2.bar(lineage_counts.index, lineage_counts.values, edgecolor="black")
+ax2.bar_label(bars, fmt='%d', label_type='edge')
+
+ax2.set_xlabel('Lineage')
+ax2.set_ylabel('Cell Count')
+plt.xticks(rotation=45, ha='right')
+
+ax2.text(-0.05, 1.05, "(b)", transform=ax2.transAxes, fontsize=16, fontweight="bold")
+
+plt.tight_layout()
+
+# Save final figure (NO caption, NO "Figure 1" text)
+plt.savefig("Figure1.png", dpi=600, bbox_inches="tight")
+plt.savefig("Figure1.pdf", dpi=600, bbox_inches="tight")
+
 plt.show()
 
 
